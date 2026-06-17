@@ -153,7 +153,7 @@ else:
         return "color: gray;"
         
     st.dataframe(
-        vote_df.style.applymap(color_votes, subset=['vote']),
+        vote_df.style.map(color_votes, subset=['vote']),
         use_container_width=True, 
         height=300
     )
