@@ -10,7 +10,7 @@ from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # Configure the browser tab title and wide layout
-st.set_page_config(page_title="EUR/USD Consensus Engine", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Kones EUR/USD Consensus Engine", layout="wide", page_icon="📈")
 
 # Automatically refresh the app every 2 seconds (2,000 milliseconds)
 st_autorefresh(interval=2000, limit=5000, key="forex_fast_counter")
@@ -67,7 +67,7 @@ def send_email_alert(direction, confidence, lots):
 # -------------------------------------------------------------------------
 # LIVE DATA ENGINE (Pulls real financial 5m EUR/USD data from the web)
 # -------------------------------------------------------------------------
-@st.cache_data(ttl=2) # Shunted down to 2 seconds to match the ultra-fast layout
+@st.cache_data(ttl=2)
 def fetch_realtime_forex():
     try:
         ticker = yf.Ticker("EURUSD=X")
@@ -114,7 +114,8 @@ def run_31_simulations(direction):
 # -------------------------------------------------------------------------
 # MAIN WEB INTERFACE LAYOUT & RISK ROUTER
 # -------------------------------------------------------------------------
-st.title("🌐 Live Multi-Agent FX Consensus Matrix")
+# Personalizing the title with your name
+st.title("🌐 Kones' Live Multi-Agent FX Consensus Matrix")
 st.caption("Autonomous 31-Model Parallel Consensus System running on 5-Minute EUR/USD Candles")
 
 # Sidebar Configuration Dashboard Controls
