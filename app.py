@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import random
 import smtplib
+import base64
 from email.mime.text import MIMEText
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
@@ -11,8 +12,21 @@ from streamlit_autorefresh import st_autorefresh
 # Configure the browser tab title and wide layout
 st.set_page_config(page_title="EUR/USD Consensus Engine", layout="wide", page_icon="📈")
 
-# Automatically refresh the app every 30 seconds silently
-st_autorefresh(interval=30000, limit=1000, key="forex_counter")
+# Automatically refresh the app every 2 seconds (2,000 milliseconds)
+st_autorefresh(interval=2000, limit=5000, key="forex_fast_counter")
+
+# -------------------------------------------------------------------------
+# AUDIO ALERT CORE ENGINE
+# -------------------------------------------------------------------------
+def play_alert_sound():
+    """Embeds an invisible HTML5 audio player that automatically triggers an alert chime."""
+    sound_url = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
+    html_string = f"""
+        <audio autoplay style="display:none;">
+            <source src="{sound_url}" type="audio/ogg">
+        </audio>
+    """
+    st.components.v1.html(html_string, height=0, width=0)
 
 # -------------------------------------------------------------------------
 # EMAIL NOTIFICATION ENGINE
@@ -53,7 +67,7 @@ def send_email_alert(direction, confidence, lots):
 # -------------------------------------------------------------------------
 # LIVE DATA ENGINE (Pulls real financial 5m EUR/USD data from the web)
 # -------------------------------------------------------------------------
-@st.cache_data(ttl=15) # Fast cache for auto-refresh matching
+@st.cache_data(ttl=2) # Shunted down to 2 seconds to match the ultra-fast layout
 def fetch_realtime_forex():
     try:
         ticker = yf.Ticker("EURUSD=X")
@@ -162,6 +176,9 @@ else:
         if max_vote >= THRESHOLD:
             st.success(f"🔥 ACTIVE SIGNAL DETECTED: {signal_direction}")
             
+            # Sound triggers immediately through browser session window
+            play_alert_sound()
+            
             # Mathematical Kelly Criterion Sizing Calculations
             b = take_profit / stop_loss
             p = max_vote / 31
@@ -174,11 +191,9 @@ else:
             
             st.metric("Calculated Target Lot Sizing", f"{final_lots} Lots")
             
-            # Email duplicate tracker setup
+            # Safety tracker block logic modified for high-frequency runtime checks
             if "last_signal_time" not in st.session_state or st.session_state.last_signal_time != market_data['time']:
                 st.session_state.last_signal_time = market_data['time']
-                
-                # Check if default credentials have been adjusted before sending
                 if "YOUR_GMAIL" not in sender_email:
                     send_email_alert(signal_direction, f"{max_vote}/31", final_lots)
 
