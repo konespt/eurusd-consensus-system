@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import random
 import smtplib
-import base64
 from email.mime.text import MIMEText
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
@@ -32,7 +31,6 @@ def play_alert_sound():
 # EMAIL NOTIFICATION ENGINE
 # -------------------------------------------------------------------------
 def send_email_alert(direction, confidence, lots):
-    """Fires a secure SMTP email alert when consensus triggers."""
     sender_email = "YOUR_GMAIL@gmail.com" 
     sender_password = "YOUR_16_DIGIT_APP_PASSWORD" 
     receiver_email = "YOUR_GMAIL@gmail.com" 
@@ -60,8 +58,7 @@ def send_email_alert(direction, confidence, lots):
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
         return True
-    except Exception as e:
-        st.sidebar.error(f"Email failed to dispatch: {str(e)}")
+    except:
         return False
 
 # -------------------------------------------------------------------------
@@ -78,8 +75,12 @@ def fetch_realtime_forex():
         last_candle = df.iloc[-1]
         pip_move = (last_candle['Close'] - last_candle['Open']) * 10000
         
+        # Get the exact unique timestamp of the current 5-minute candle
+        candle_timestamp = df.index[-1].strftime("%Y-%m-%d %H:%M")
+        
         metrics = {
             "time": datetime.now().strftime("%H:%M:%S UTC"),
+            "candle_id": candle_timestamp, # Used to lock signals to the specific candle
             "close": round(last_candle['Close'], 5),
             "open": round(last_candle['Open'], 5),
             "high": round(last_candle['High'], 5),
@@ -130,6 +131,12 @@ market_data, error = fetch_realtime_forex()
 if error:
     st.error(f"Market Data Pipeline Interrupted: {error}")
 else:
+    # Initialize background memory memory states if empty
+    if "active_lock_candle" not in st.session_state:
+        st.session_state.active_lock_candle = None
+    if "locked_signal_data" not in st.session_state:
+        st.session_state.locked_signal_data = None
+
     # Stats Summary Bar
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Live EUR/USD Price", f"{market_data['close']:.5f}")
@@ -156,11 +163,23 @@ else:
     with right_col:
         st.subheader("Consensus Risk Router")
         
-        with st.spinner("Polling 31 parallel model networks..."):
+        # Check if a locked signal already exists for THIS specific 5-minute candle interval
+        if st.session_state.active_lock_candle == market_data['candle_id']:
+            # Use the locked details instead of running a fresh changing calculation
+            votes = st.session_state.locked_signal_data["votes"]
+            buys = st.session_state.locked_signal_data["buys"]
+            sells = st.session_state.locked_signal_data["sells"]
+            max_vote = st.session_state.locked_signal_data["max_vote"]
+            signal_direction = st.session_state.locked_signal_data["signal_direction"]
+            is_locked_view = True
+        else:
+            # Run fresh calculations normally
             votes = run_31_simulations(market_data['direction'])
             buys = sum(1 for v in votes if v['vote'] == "BUY")
             sells = sum(1 for v in votes if v['vote'] == "SELL")
-            flats = sum(1 for v in votes if v['vote'] == "FLAT")
+            max_vote = max(buys, sells)
+            signal_direction = "BUY" if buys > sells else "SELL"
+            is_locked_view = False
             
         # UI Progress Bars for Votes
         st.write(f"**Buy Consensus Core:** {buys}/31")
@@ -169,15 +188,21 @@ else:
         st.progress(sells / 31)
         
         THRESHOLD = 28
-        max_vote = max(buys, sells)
-        signal_direction = "BUY" if buys > sells else "SELL"
-        
         st.markdown("---")
+        
+        # Determine if signal meets threshold criteria
         if max_vote >= THRESHOLD:
             st.success(f"🔥 ACTIVE SIGNAL DETECTED: {signal_direction}")
             
-            # Sound triggers immediately through browser session window
-            play_alert_sound()
+            # Lock the signal into session memory for this specific candle interval frame
+            if st.session_state.active_lock_candle != market_data['candle_id']:
+                st.session_state.active_lock_candle = market_data['candle_id']
+                st.session_state.locked_signal_data = {
+                    "votes": votes, "buys": buys, "sells": sells, 
+                    "max_vote": max_vote, "signal_direction": signal_direction
+                }
+                # Trigger sound chime once at the start of the lock
+                play_alert_sound()
             
             # Mathematical Kelly Criterion Sizing Calculations
             b = take_profit / stop_loss
@@ -190,8 +215,9 @@ else:
             final_lots = f"{max(lot_sizing, 0.01):.2f}"
             
             st.metric("Calculated Target Lot Sizing", f"{final_lots} Lots")
+            st.caption(f"🔒 Signal locked for 5m candle ending around: {market_data['candle_id']}")
             
-            # Safety tracker block logic modified for high-frequency runtime checks
+            # Email execution core
             if "last_signal_time" not in st.session_state or st.session_state.last_signal_time != market_data['time']:
                 st.session_state.last_signal_time = market_data['time']
                 if "YOUR_GMAIL" not in sender_email:
@@ -204,6 +230,7 @@ else:
                 "Capital Risk Exposure": f"${cash_at_risk:.2f}"
             })
         else:
+            # If no active lock exists, reset back to normal flat display rules
             st.warning(f"🛑 SYSTEM STATE: FLAT (No Consensus)")
             st.info(f"Highest active path hit {max_vote} votes. System requires ≥ {THRESHOLD} matching nodes to clear risk filters.")
 
